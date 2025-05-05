@@ -1,0 +1,106 @@
+2025-05-05 13:44:06,984 - __main__ - INFO - Azure OpenAI components initialized successfully
+2025-05-05 13:44:09,151 - chromadb.telemetry.product.posthog - INFO - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-05-05 13:44:10,747 - __main__ - INFO - Created new vector store at ./chroma_db_docx
+2025-05-05 13:44:10,752 - __main__ - INFO - RAG pipeline initialized successfully
+2025-05-05 13:44:10,753 - __main__ - INFO - RAG application initialized successfully
+2025-05-05 13:44:13,318 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 13:44:13,548 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 13:44:16,277 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2025-05-05 13:44:19,062 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2025-05-05 13:48:30,048 - __main__ - ERROR - Error processing uploaded files: 'bytes' object has no attribute 'name'
+2025-05-05 13:50:44,071 - __main__ - INFO - Azure OpenAI components initialized successfully
+2025-05-05 13:50:45,089 - chromadb.telemetry.product.posthog - INFO - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-05-05 13:50:45,419 - __main__ - INFO - Loaded existing vector store from ./chroma_db_docx
+2025-05-05 13:50:45,422 - __main__ - INFO - RAG pipeline initialized successfully
+2025-05-05 13:50:45,422 - __main__ - INFO - RAG application initialized successfully
+2025-05-05 13:50:47,646 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 13:50:47,768 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 13:50:49,395 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2025-05-05 13:50:51,476 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2025-05-05 13:51:02,960 - __main__ - INFO - Received 1 files for upload
+2025-05-05 13:51:04,912 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/gpt-4o-mini/embeddings?api-version=2023-05-15 "HTTP/1.1 400 Bad Request"
+2025-05-05 13:51:04,914 - __main__ - ERROR - Error processing uploaded files: Error code: 400 - {'error': {'code': 'OperationNotSupported', 'message': 'The embeddings operation does not work with the specified model, gpt-4o-mini. Please choose different model and try again. You can learn more about which models can be used with each operation here: https://go.microsoft.com/fwlink/?linkid=2197993.'}}
+2025-05-05 14:00:31,526 - __main__ - INFO - Azure OpenAI components initialized successfully
+2025-05-05 14:00:34,821 - chromadb.telemetry.product.posthog - INFO - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-05-05 14:00:36,597 - __main__ - INFO - Loaded existing vector store from ./chroma_db_docx
+2025-05-05 14:00:36,601 - __main__ - INFO - RAG pipeline initialized successfully
+2025-05-05 14:00:36,604 - __main__ - INFO - RAG application initialized successfully
+2025-05-05 14:00:39,639 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:00:39,699 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:00:43,052 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2025-05-05 14:00:45,874 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2025-05-05 14:01:39,235 - __main__ - INFO - Received 1 files for upload
+2025-05-05 14:01:44,739 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/gpt-4o-mini/embeddings?api-version=2023-05-15 "HTTP/1.1 400 Bad Request"
+2025-05-05 14:01:44,741 - __main__ - ERROR - Error processing uploaded files: Error code: 400 - {'error': {'code': 'OperationNotSupported', 'message': 'The embeddings operation does not work with the specified model, gpt-4o-mini. Please choose different model and try again. You can learn more about which models can be used with each operation here: https://go.microsoft.com/fwlink/?linkid=2197993.'}}
+2025-05-05 14:11:45,203 - __main__ - INFO - Azure OpenAI components initialized successfully
+2025-05-05 14:11:47,712 - chromadb.telemetry.product.posthog - INFO - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-05-05 14:11:49,049 - __main__ - INFO - Loaded existing vector store from ./chroma_db_docx
+2025-05-05 14:11:49,053 - __main__ - INFO - RAG pipeline initialized successfully
+2025-05-05 14:11:49,053 - __main__ - INFO - RAG application initialized successfully
+2025-05-05 14:11:51,710 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:11:52,083 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:11:54,856 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2025-05-05 14:11:57,550 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2025-05-05 14:12:25,386 - __main__ - INFO - Received 1 files for upload
+2025-05-05 14:12:28,079 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/gpt-4o-mini/embeddings?api-version=2023-05-15 "HTTP/1.1 400 Bad Request"
+2025-05-05 14:12:28,082 - __main__ - ERROR - Error processing uploaded files: Error code: 400 - {'error': {'code': 'OperationNotSupported', 'message': 'The embeddings operation does not work with the specified model, gpt-4o-mini. Please choose different model and try again. You can learn more about which models can be used with each operation here: https://go.microsoft.com/fwlink/?linkid=2197993.'}}
+2025-05-05 14:15:21,814 - __main__ - INFO - Azure OpenAI components initialized successfully
+2025-05-05 14:15:22,904 - chromadb.telemetry.product.posthog - INFO - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-05-05 14:15:23,529 - __main__ - INFO - Loaded existing vector store from ./chroma_db_docx
+2025-05-05 14:15:23,531 - __main__ - INFO - RAG pipeline initialized successfully
+2025-05-05 14:15:23,531 - __main__ - INFO - RAG application initialized successfully
+2025-05-05 14:15:25,934 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:15:26,040 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:15:27,635 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2025-05-05 14:15:30,045 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2025-05-05 14:15:43,279 - __main__ - INFO - Received 1 files for upload
+2025-05-05 14:15:45,421 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/gpt-4o-mini/embeddings?api-version=2023-05-15 "HTTP/1.1 400 Bad Request"
+2025-05-05 14:15:45,422 - __main__ - ERROR - Error processing uploaded files: Error code: 400 - {'error': {'code': 'OperationNotSupported', 'message': 'The embeddings operation does not work with the specified model, gpt-4o-mini. Please choose different model and try again. You can learn more about which models can be used with each operation here: https://go.microsoft.com/fwlink/?linkid=2197993.'}}
+2025-05-05 14:21:26,623 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: gpt-4o-mini, Chat deployment: gpt-4o-mini
+2025-05-05 14:21:29,759 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/gpt-4o-mini/embeddings?api-version=2023-05-15 "HTTP/1.1 400 Bad Request"
+2025-05-05 14:21:29,762 - __main__ - ERROR - Failed to initialize Azure components: The model in deployment 'gpt-4o-mini' doesn't support embeddings. Please use a text-embedding model like 'text-embedding-ada-002'. Error: Error code: 400 - {'error': {'code': 'OperationNotSupported', 'message': 'The embeddings operation does not work with the specified model, gpt-4o-mini. Please choose different model and try again. You can learn more about which models can be used with each operation here: https://go.microsoft.com/fwlink/?linkid=2197993.'}}
+2025-05-05 14:24:10,459 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:24:13,630 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:24:13,633 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}
+2025-05-05 14:25:33,082 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:25:36,009 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:25:36,012 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}
+2025-05-05 14:26:26,036 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:26:30,395 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:26:30,401 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}
+2025-05-05 14:27:12,060 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:27:14,666 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:27:14,669 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}
+2025-05-05 14:28:07,309 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:28:09,979 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:28:09,984 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}
+2025-05-05 14:31:40,095 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:31:42,576 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:31:42,580 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}Failed to initialize embedding_deployment: text-embedding-ada-002Failed to initialize endpoint: https://luminii-ai-services.services.ai.azure.com/
+2025-05-05 14:32:38,668 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:32:41,192 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:32:41,196 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}Failed to initialize embedding_deployment: text-embedding-ada-002Failed to initialize endpoint: https://luminii-ai-services.services.ai.azure.com/Failed to initialize api_key: BHUe6AeyoKHj3ihp77Y7bqwsxFsm5CrNYjgn45amZl9TYD5Mn8MDJQQJ99BBACmepeSXJ3w3AAAAACOGp5Sv"
+2025-05-05 14:33:58,673 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:34:02,392 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 401 PermissionDenied"
+2025-05-05 14:34:02,399 - __main__ - ERROR - Failed to initialize Azure components: Failed to initialize embeddings: Error code: 401 - {'error': {'code': '401', 'message': 'Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource.'}}Failed to initialize embedding_deployment: text-embedding-ada-002Failed to initialize endpoint: https://luminii-ai-services.services.ai.azure.com/Failed to initialize api_key: BHUe6AeyoKHj3ihp77Y7bqwsxFsm5CrNYjgn45amZl9TYD5Mn8MDJQQJ99BBACmepeSXJ3w3AAAAACOGp5Sv"
+2025-05-05 14:36:45,408 - __main__ - INFO - Initializing Azure OpenAI with: Embedding deployment: text-embedding-ada-002, Chat deployment: gpt-4o-mini
+2025-05-05 14:36:49,231 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 200 OK"
+2025-05-05 14:36:49,248 - __main__ - INFO - Embeddings successfully initialized and tested (1536 dimensions)
+2025-05-05 14:36:51,237 - __main__ - INFO - Chat model successfully initialized
+2025-05-05 14:36:51,238 - __main__ - INFO - Azure OpenAI components initialized successfully
+2025-05-05 14:36:52,906 - chromadb.telemetry.product.posthog - INFO - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-05-05 14:36:54,009 - __main__ - INFO - Loaded existing vector store from ./chroma_db_docx
+2025-05-05 14:36:54,012 - __main__ - INFO - RAG pipeline initialized successfully
+2025-05-05 14:36:54,012 - __main__ - INFO - RAG application initialized successfully
+2025-05-05 14:36:56,757 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:36:56,832 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2025-05-05 14:36:59,328 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2025-05-05 14:37:02,146 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2025-05-05 14:37:13,079 - __main__ - INFO - Received 1 files for upload
+2025-05-05 14:37:14,269 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 200 OK"
+2025-05-05 14:37:14,870 - __main__ - INFO - Added 10 document chunks from 1 uploaded files
+2025-05-05 14:37:51,171 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 200 OK"
+2025-05-05 14:37:51,177 - chromadb.segment.impl.vector.local_persistent_hnsw - WARNING - Number of requested results 15 is greater than number of elements in index 10, updating n_results = 10
+2025-05-05 14:37:51,788 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/text-embedding-ada-002/embeddings?api-version=2024-02-15-preview "HTTP/1.1 200 OK"
+2025-05-05 14:37:51,797 - chromadb.segment.impl.vector.local_persistent_hnsw - WARNING - Number of requested results 15 is greater than number of elements in index 10, updating n_results = 10
+2025-05-05 14:37:54,201 - httpx - INFO - HTTP Request: POST https://luminii-ai-services.services.ai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-02-15-preview "HTTP/1.1 200 OK"
