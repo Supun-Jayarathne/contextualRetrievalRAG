@@ -2,13 +2,12 @@ import os
 import gradio as gr
 import pandas as pd
 from dotenv import load_dotenv
-from typing import List, Iterator, Optional, Dict, Any
+from typing import List, Iterator, Optional, Dict, Any, Tuple
 from langchain_community.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 from langchain_community.vectorstores import Chroma
-from langchain.chains import RetrievalQA
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
 from langchain.chains.conversation.memory import ConversationBufferWindowMemory
@@ -19,6 +18,8 @@ from io import BytesIO
 import logging
 import time
 import hashlib
+import json
+from tqdm.auto import tqdm
 
 # Set up logging
 logging.basicConfig(
@@ -81,17 +82,105 @@ class DocxLoader(BaseLoader):
         yield from self.load()
 
 
-class RAGApplication:
-    """Main RAG application class to encapsulate functionality"""
+class ContextualRetriever:
+    """Class to handle contextual enrichment of document chunks"""
+
+    def __init__(self, llm):
+        self.llm = llm
+        self.context_prompt = PromptTemplate(
+            template="""You are a document processing assistant. For the following document chunk, extract key contextual information.
+            
+            DOCUMENT CHUNK:
+            {chunk_text}
+            
+            DOCUMENT SOURCE: {source}
+            
+            First, identify:
+            1. The main topics or subjects
+            2. Any entities mentioned (people, organizations, products, etc.)
+            3. Key dates or time references
+            4. Important concepts or terminology
+            
+            Then provide a brief contextual summary (2-3 sentences) that captures what this chunk is about.
+            
+            Format your response as a JSON object with the following structure:
+            {{
+                "topics": ["topic1", "topic2", ...],
+                "entities": ["entity1", "entity2", ...],
+                "temporal_references": ["date1", "timeframe1", ...],
+                "key_concepts": ["concept1", "concept2", ...],
+                "contextual_summary": "Brief summary here"
+            }}
+            
+            ONLY RESPOND WITH THE JSON OBJECT, nothing else.
+            """,
+            input_variables=["chunk_text", "source"]
+        )
+
+    def enrich_chunk(self, doc: Document) -> Document:
+        """Add contextual information to a document chunk"""
+        try:
+            # Skip empty documents
+            if not doc.page_content.strip():
+                return doc
+
+            # Get source filename
+            source = doc.metadata.get('source', 'Unknown')
+            filename = os.path.basename(source)
+
+            # Process with LLM to extract context
+            context_chain = self.context_prompt | self.llm | StrOutputParser()
+            context_result = context_chain.invoke({
+                "chunk_text": doc.page_content,
+                "source": filename
+            })
+
+            # Parse LLM output as JSON
+            try:
+                context_data = json.loads(context_result)
+
+                # Update document metadata with context
+                enriched_metadata = doc.metadata.copy()
+
+                # Convert lists to strings for ChromaDB compatibility
+                enriched_metadata["topics"] = ", ".join(
+                    context_data.get("topics", []))
+                enriched_metadata["entities"] = ", ".join(
+                    context_data.get("entities", []))
+                enriched_metadata["temporal_references"] = ", ".join(
+                    context_data.get("temporal_references", []))
+                enriched_metadata["key_concepts"] = ", ".join(
+                    context_data.get("key_concepts", []))
+                enriched_metadata["contextual_summary"] = context_data.get(
+                    "contextual_summary", "")
+
+                # Create enriched content by prepending the contextual summary
+                summary = context_data.get("contextual_summary", "")
+                enriched_content = f"CONTEXT: {summary}\n\n{doc.page_content}"
+
+                return Document(page_content=enriched_content, metadata=enriched_metadata)
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"Failed to parse context JSON: {context_result[:100]}...")
+                return doc
+
+        except Exception as e:
+            logger.error(f"Error enriching chunk: {str(e)}")
+            return doc
+
+
+class ContextualRAGApplication:
+    """Enhanced RAG application with contextual embedding"""
 
     def __init__(self, persist_directory: str = "./chroma_db_docx"):
-        """Initialize the RAG application"""
+        """Initialize the Contextual RAG application"""
         self.persist_directory = persist_directory
         self.embeddings = None
         self.llm = None
         self.vectorstore = None
         self.retriever = None
         self.qa_chain = None
+        self.contextual_enricher = None
         self.memory = ConversationBufferWindowMemory(k=5, return_messages=True)
 
         # Load environment variables
@@ -100,9 +189,10 @@ class RAGApplication:
         # Initialize components
         self._initialize_azure_components()
         self._initialize_vectorstore()
+        self._initialize_contextual_enricher()
         self._initialize_rag_pipeline()
 
-        logger.info("RAG application initialized successfully")
+        logger.info("Contextual RAG application initialized successfully")
 
     def _initialize_azure_components(self):
         """Initialize Azure OpenAI components"""
@@ -158,9 +248,6 @@ class RAGApplication:
                 else:
                     raise ValueError(
                         f"Failed to initialize embeddings: {error_msg}"
-                        f"Failed to initialize embedding_deployment: {embedding_deployment}"
-                        f"Failed to initialize endpoint: {endpoint}"
-                        f"Failed to initialize api_key: {api_key}"
                     )
 
             # Initialize LLM
@@ -170,7 +257,7 @@ class RAGApplication:
                     openai_api_version=api_version,
                     azure_endpoint=endpoint,
                     api_key=api_key,
-                    temperature=0.1,  # Slightly increased for more natural responses
+                    temperature=0.1,  # Low temperature for factual responses
                     max_tokens=1000
                 )
                 logger.info(f"Chat model successfully initialized")
@@ -180,6 +267,15 @@ class RAGApplication:
             logger.info("Azure OpenAI components initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Azure components: {str(e)}")
+            raise
+
+    def _initialize_contextual_enricher(self):
+        """Initialize the contextual enrichment component"""
+        try:
+            self.contextual_enricher = ContextualRetriever(self.llm)
+            logger.info("Contextual enricher initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize contextual enricher: {str(e)}")
             raise
 
     def _initialize_vectorstore(self):
@@ -213,18 +309,19 @@ class RAGApplication:
     def _initialize_rag_pipeline(self):
         """Initialize the RAG pipeline"""
         try:
-            # Create retriever with MMR search
+            # Create retriever with hybrid search (combining BM25 and vector similarity)
             self.retriever = self.vectorstore.as_retriever(
-                search_type="mmr",  # Maximum Marginal Relevance
+                search_type="mmr",  # Maximum Marginal Relevance for diversity
                 search_kwargs={
                     "k": 5,         # Number of documents to return
-                    "fetch_k": 15,  # Number of documents to consider
+                    "fetch_k": 20,  # Number of documents to consider
                     "lambda_mult": 0.7  # Diversity of results (0-1)
                 }
             )
 
             # Create QA chain with custom prompt
-            prompt_template = """You are a professional document intelligence assistant. Answer the question based only on the following context from DOCX documents:
+            prompt_template = """You are a professional document intelligence assistant with contextual understanding.
+            Answer the question based on the following context from DOCX documents, which includes contextual summaries:
             
             CONTEXT:
             {context}
@@ -235,6 +332,7 @@ class RAGApplication:
             USER QUESTION: {question}
             
             Answer in a professional and concise tone. Format your response for readability when appropriate.
+            Leverage the contextual information at the beginning of each chunk to provide a more complete answer.
             If the answer isn't in the documents, say "I don't have enough information in the documents to answer this question."
             """
 
@@ -325,8 +423,9 @@ class RAGApplication:
                             content = file
 
                     # Generate a unique file path for the uploaded file
-                    file_hash = hashlib.md5(filename.encode()).hexdigest()[:8]
-                    temp_path = f"./temp_{file_hash}_{os.path.basename(filename)}"
+                    file_hash = hashlib.md5(
+                        str(filename).encode()).hexdigest()[:8]
+                    temp_path = f"./temp_{file_hash}_{os.path.basename(str(filename))}"
 
                     # Save the byte content to a temporary file
                     with open(temp_path, "wb") as f:
@@ -363,7 +462,7 @@ class RAGApplication:
             return f"Error processing files: {str(e)}"
 
     def _process_documents(self, documents: List[Document]) -> List[Document]:
-        """Process and split documents"""
+        """Process and split documents with contextual enrichment"""
         # Filter out empty documents
         valid_docs = [doc for doc in documents if doc.page_content.strip()]
 
@@ -379,7 +478,19 @@ class RAGApplication:
             separators=["\n\n", "\n", " ", ""]
         )
 
-        return text_splitter.split_documents(valid_docs)
+        # Split documents into chunks
+        chunks = text_splitter.split_documents(valid_docs)
+
+        # Apply contextual enrichment to each chunk
+        enriched_chunks = []
+        logger.info(
+            f"Enriching {len(chunks)} document chunks with contextual information...")
+
+        for chunk in tqdm(chunks, desc="Enriching chunks"):
+            enriched_chunk = self.contextual_enricher.enrich_chunk(chunk)
+            enriched_chunks.append(enriched_chunk)
+
+        return enriched_chunks
 
     def query(self, question: str, add_to_memory: bool = True) -> Dict[str, Any]:
         """Query the RAG pipeline and get results"""
@@ -434,24 +545,55 @@ class RAGApplication:
                 docs = self.vectorstore._collection.get()
                 metadatas = docs["metadatas"]
                 unique_sources = set()
+
+                # Collect topic statistics
+                all_topics = []
+                all_entities = []
+
                 for metadata in metadatas:
                     if "source" in metadata:
                         unique_sources.add(metadata["source"])
+
+                    # Collect topics and entities for statistics
+                    if "topics" in metadata and isinstance(metadata["topics"], list):
+                        all_topics.extend(metadata["topics"])
+                    if "entities" in metadata and isinstance(metadata["entities"], list):
+                        all_entities.extend(metadata["entities"])
+
+                # Get top topics and entities
+                top_topics = self._get_top_items(all_topics, 10)
+                top_entities = self._get_top_items(all_entities, 10)
+
             else:
                 unique_sources = set()
+                top_topics = []
+                top_entities = []
 
             return {
                 "document_chunks": doc_count,
                 "unique_files": len(unique_sources),
-                "files": list(unique_sources)
+                "files": list(unique_sources),
+                "top_topics": top_topics,
+                "top_entities": top_entities
             }
         except Exception as e:
             logger.error(f"Error getting document stats: {str(e)}")
             return {
                 "document_chunks": 0,
                 "unique_files": 0,
-                "files": []
+                "files": [],
+                "top_topics": [],
+                "top_entities": []
             }
+
+    def _get_top_items(self, items: List[str], limit: int = 10) -> List[Tuple[str, int]]:
+        """Get top items by frequency"""
+        from collections import Counter
+        if not items:
+            return []
+
+        counter = Counter(items)
+        return counter.most_common(limit)
 
     def clear_memory(self) -> None:
         """Clear the conversation memory"""
@@ -475,14 +617,50 @@ class RAGApplication:
             logger.error(f"Error resetting vector store: {str(e)}")
             return f"Error resetting vector store: {str(e)}"
 
+    def search_by_metadata(self, field: str, query: str) -> List[Document]:
+        """Search for documents with specific metadata field values"""
+        try:
+            # Get all documents
+            all_docs = self.vectorstore._collection.get()
+            metadatas = all_docs["metadatas"]
+            documents = all_docs["documents"]
+
+            # Filter documents by metadata field
+            results = []
+            for i, metadata in enumerate(metadatas):
+                # Check if the field exists and contains the query
+                if field in metadata:
+                    field_value = metadata[field]
+
+                    # Handle different types of metadata fields
+                    if isinstance(field_value, list):
+                        # For lists (like topics, entities)
+                        if any(query.lower() in item.lower() for item in field_value):
+                            results.append(Document(
+                                page_content=documents[i],
+                                metadata=metadata
+                            ))
+                    elif isinstance(field_value, str):
+                        # For string fields
+                        if query.lower() in field_value.lower():
+                            results.append(Document(
+                                page_content=documents[i],
+                                metadata=metadata
+                            ))
+
+            return results
+        except Exception as e:
+            logger.error(f"Error searching by metadata: {str(e)}")
+            return []
+
 
 # Initialize the RAG application
-rag_app = RAGApplication()
+rag_app = ContextualRAGApplication()
 
 # Gradio Interface
 
 
-def query_rag(question, history, show_sources, include_time):
+def query_rag(question, history, show_sources, include_time, show_context):
     """Handle the question and return RAG response"""
     try:
         # Query the RAG pipeline
@@ -491,10 +669,19 @@ def query_rag(question, history, show_sources, include_time):
 
         # Add sources if requested
         if show_sources and "source_documents" in result:
-            sources = "\n\n📄 **Document Sources:**\n" + "\n".join(
-                [f"- {os.path.basename(doc.metadata.get('source', 'Unknown'))}"
-                 for doc in result["source_documents"]]
-            )
+            sources = "\n\n📄 **Document Sources:**\n"
+            for i, doc in enumerate(result["source_documents"], 1):
+                source_name = os.path.basename(
+                    doc.metadata.get('source', 'Unknown'))
+                sources += f"- {source_name}"
+
+                # Include contextual summary if requested
+                if show_context and "contextual_summary" in doc.metadata:
+                    summary = doc.metadata["contextual_summary"]
+                    sources += f" - *{summary}*"
+
+                sources += "\n"
+
             response += sources
 
         # Add query time if requested
@@ -551,6 +738,18 @@ def display_document_stats():
     response += f"- Total document chunks: {stats['document_chunks']}\n"
     response += f"- Unique files: {stats['unique_files']}\n\n"
 
+    if stats["top_topics"]:
+        response += "**Top Topics:**\n"
+        for topic, count in stats["top_topics"]:
+            response += f"- {topic} ({count})\n"
+        response += "\n"
+
+    if stats["top_entities"]:
+        response += "**Top Entities:**\n"
+        for entity, count in stats["top_entities"]:
+            response += f"- {entity} ({count})\n"
+        response += "\n"
+
     if stats["files"]:
         response += "**Files:**\n"
         for i, file in enumerate(stats["files"], 1):
@@ -559,11 +758,54 @@ def display_document_stats():
     return response
 
 
+def search_metadata(search_type, search_query):
+    """Search documents by metadata fields"""
+    if not search_query.strip():
+        return "Please enter a search query"
+
+    # Map search type to metadata field
+    field_mapping = {
+        "Topic": "topics",
+        "Entity": "entities",
+        "Temporal Reference": "temporal_references",
+        "Key Concept": "key_concepts"
+    }
+
+    field = field_mapping.get(search_type)
+    if not field:
+        return f"Invalid search type: {search_type}"
+
+    # Perform search
+    results = rag_app.search_by_metadata(field, search_query)
+
+    if not results:
+        return f"No documents found matching '{search_query}' in {search_type.lower()}s"
+
+    # Format results
+    response = f"📝 **Search Results for '{search_query}' in {search_type}s:**\n\n"
+    response += f"Found {len(results)} matching document chunks\n\n"
+
+    for i, doc in enumerate(results[:5], 1):  # Show top 5 results
+        source = os.path.basename(doc.metadata.get("source", "Unknown"))
+        summary = doc.metadata.get(
+            "contextual_summary", "No summary available")
+
+        response += f"**Result {i}:** {source}\n"
+        response += f"*Summary:* {summary}\n\n"
+
+    if len(results) > 5:
+        response += f"*...and {len(results) - 5} more results*"
+
+    return response
+
+
 # Create Gradio Interface
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
-    # 📄 DOCX Document Intelligence
-    **Azure OpenAI-powered RAG application for Word documents**
+    # 📄 Contextual Document Intelligence
+    **Azure OpenAI-powered Contextual RAG application**
+    
+    This application uses contextual retrieval to enrich document chunks with additional information before indexing them.
     """)
 
     with gr.Tab("💬 Chat with Documents"):
@@ -573,12 +815,9 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
                     fn=query_rag,
                     additional_inputs=[
                         gr.Checkbox(label="Show document sources", value=True),
-                        gr.Checkbox(label="Show query time", value=False)
-                    ],
-                    examples=[
-                        ["What is the main purpose of these documents?", True, False],
-                        ["Summarize the key points from these files", False, False],
-                        ["What are the major sections in these documents?", True, True]
+                        gr.Checkbox(label="Show query time", value=False),
+                        gr.Checkbox(
+                            label="Show contextual summaries", value=True)
                     ]
                 )
 
