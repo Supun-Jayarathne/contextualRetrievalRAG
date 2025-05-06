@@ -34,40 +34,41 @@ logger = logging.getLogger(__name__)
 
 
 class DocxLoader(BaseLoader):
-    """Improved DOCX loader with better error handling"""
+    """Loader for DOCX files that preserves full document context"""
 
     def __init__(self, file_path: str):
+        """Initialize with file path"""
         self.file_path = file_path
 
     def load(self) -> List[Document]:
-        """Load and return documents from the DOCX file"""
+        """Load and process DOCX file"""
         try:
             doc = DocxDocument(self.file_path)
-
-            # Extract paragraphs with basic formatting preservation
+            full_text = []
             paragraphs = []
+
             for para in doc.paragraphs:
                 if para.text.strip():
-                    # Include heading style information if available
-                    if para.style and "Heading" in para.style.name:
-                        paragraphs.append(f"{para.style.name}: {para.text}")
-                    else:
-                        paragraphs.append(para.text)
+                    # Preserve heading styles
+                    text = f"{para.style.name}: {para.text}" if para.style and "Heading" in para.style.name else para.text
+                    paragraphs.append(text)
+                    full_text.append(text)
 
-            # Join paragraphs with newlines
-            text = "\n".join(paragraphs)
+            # Store both the initial content and full document
+            content = "\n".join(paragraphs)
+            full_content = "\n".join(full_text)
 
-            # Extract basic metadata
             metadata = {
                 "source": self.file_path,
                 "filename": os.path.basename(self.file_path),
-                "date_processed": time.strftime("%Y-%m-%d %H:%M:%S")
+                "full_document": full_content,  # Store complete document
+                "is_full_document": True        # Flag for original
             }
 
-            return [Document(page_content=text, metadata=metadata)]
+            return [Document(page_content=content, metadata=metadata)]
+
         except Exception as e:
             logger.error(f"Error loading {self.file_path}: {str(e)}")
-            # Return empty document with error info in metadata
             return [Document(
                 page_content="",
                 metadata={
@@ -77,44 +78,30 @@ class DocxLoader(BaseLoader):
                 }
             )]
 
-    def lazy_load(self) -> Iterator[Document]:
-        """Lazy load documents"""
-        yield from self.load()
-
 
 class ContextualRetriever:
     """Class to handle contextual enrichment of document chunks"""
 
     def __init__(self, llm):
+        """Initialize the retriever with an LLM instance"""
         self.llm = llm
         self.context_prompt = PromptTemplate(
-            template="""You are a document processing assistant. For the following document chunk, extract key contextual information.
-            
-            DOCUMENT CHUNK:
-            {chunk_text}
-            
-            DOCUMENT SOURCE: {source}
-            
-            First, identify:
-            1. The main topics or subjects
-            2. Any entities mentioned (people, organizations, products, etc.)
-            3. Key dates or time references
-            4. Important concepts or terminology
-            
-            Then provide a brief contextual summary (2-3 sentences) that captures what this chunk is about.
-            
-            Format your response as a JSON object with the following structure:
-            {{
-                "topics": ["topic1", "topic2", ...],
-                "entities": ["entity1", "entity2", ...],
-                "temporal_references": ["date1", "timeframe1", ...],
-                "key_concepts": ["concept1", "concept2", ...],
-                "contextual_summary": "Brief summary here"
-            }}
-            
-            ONLY RESPOND WITH THE JSON OBJECT, nothing else.
-            """,
-            input_variables=["chunk_text", "source"]
+            template="""\
+                <document>
+                {document}
+                </document>
+                Here is the chunk we want to situate within the whole document:
+                <chunk>
+                {chunk}
+                </chunk>
+                Please provide a concise context (1-2 sentences) explaining how this chunk fits within the larger document to improve search retrieval. Focus on:
+                - The chunk's role in the document structure
+                - Its relationship to surrounding content
+                - Key concepts it connects to
+
+                Answer ONLY with the context description, nothing else.
+                """,
+            input_variables=["document", "chunk"]
         )
 
     def enrich_chunk(self, doc: Document) -> Document:
@@ -124,45 +111,46 @@ class ContextualRetriever:
             if not doc.page_content.strip():
                 return doc
 
-            # Get source filename
-            source = doc.metadata.get('source', 'Unknown')
-            filename = os.path.basename(source)
+            # Get full document content from metadata
+            full_document = doc.metadata.get("full_document")
+
+            print(f"Full document length: {len(full_document)}")
+            print(f"Chunk length: {len(doc.page_content)}")
+            print(
+                f"Chunk position: {doc.metadata.get('start_index')}-{doc.metadata.get('end_index')}")
+            # print(f"First 50 chars of full doc: {full_document[:50]}...")
+            # print(f"First 50 chars of chunk: {doc.page_content[:50]}...")
+            print(f"full doc: {full_document}")
+            print(f"full chunk: {doc.page_content}")
+
+            if not full_document:
+                logger.warning("No full document found in metadata")
+                return doc
+
+            # Verify we're not accidentally using the chunk as the full document
+            if full_document == doc.page_content:
+                logger.warning(
+                    "Full document matches chunk content - skipping enrichment")
+                return doc
 
             # Process with LLM to extract context
             context_chain = self.context_prompt | self.llm | StrOutputParser()
             context_result = context_chain.invoke({
-                "chunk_text": doc.page_content,
-                "source": filename
+                "document": full_document,
+                "chunk": doc.page_content
             })
 
-            # Parse LLM output as JSON
-            try:
-                context_data = json.loads(context_result)
+            # Update document metadata
+            enriched_metadata = doc.metadata.copy()
+            enriched_metadata["contextual_summary"] = context_result.strip()
 
-                # Update document metadata with context
-                enriched_metadata = doc.metadata.copy()
+            # Create enriched content
+            enriched_content = f"DOCUMENT CONTEXT: {context_result}\n\nCHUNK CONTENT:\n{doc.page_content}"
 
-                # Convert lists to strings for ChromaDB compatibility
-                enriched_metadata["topics"] = ", ".join(
-                    context_data.get("topics", []))
-                enriched_metadata["entities"] = ", ".join(
-                    context_data.get("entities", []))
-                enriched_metadata["temporal_references"] = ", ".join(
-                    context_data.get("temporal_references", []))
-                enriched_metadata["key_concepts"] = ", ".join(
-                    context_data.get("key_concepts", []))
-                enriched_metadata["contextual_summary"] = context_data.get(
-                    "contextual_summary", "")
-
-                # Create enriched content by prepending the contextual summary
-                summary = context_data.get("contextual_summary", "")
-                enriched_content = f"CONTEXT: {summary}\n\n{doc.page_content}"
-
-                return Document(page_content=enriched_content, metadata=enriched_metadata)
-            except json.JSONDecodeError:
-                logger.warning(
-                    f"Failed to parse context JSON: {context_result[:100]}...")
-                return doc
+            return Document(
+                page_content=enriched_content,
+                metadata=enriched_metadata
+            )
 
         except Exception as e:
             logger.error(f"Error enriching chunk: {str(e)}")
@@ -307,9 +295,8 @@ class ContextualRAGApplication:
             raise
 
     def _initialize_rag_pipeline(self):
-        """Initialize the RAG pipeline"""
+        """Initialize RAG pipeline with context-aware retrieval"""
         try:
-            # Create retriever with hybrid search (combining BM25 and vector similarity)
             self.retriever = self.vectorstore.as_retriever(
                 search_type="mmr",  # Maximum Marginal Relevance for diversity
                 search_kwargs={
@@ -319,21 +306,21 @@ class ContextualRAGApplication:
                 }
             )
 
-            # Create QA chain with custom prompt
-            prompt_template = """You are a professional document intelligence assistant with contextual understanding.
-            Answer the question based on the following context from DOCX documents, which includes contextual summaries:
+            prompt_template = """You are a document intelligence assistant. Use the following context to answer:
             
-            CONTEXT:
+            DOCUMENT CONTEXT:
             {context}
             
             CHAT HISTORY:
             {chat_history}
             
-            USER QUESTION: {question}
+            QUESTION: {question}
             
-            Answer in a professional and concise tone. Format your response for readability when appropriate.
-            Leverage the contextual information at the beginning of each chunk to provide a more complete answer.
-            If the answer isn't in the documents, say "I don't have enough information in the documents to answer this question."
+            Guidelines:
+            1. First analyze the document context provided with each chunk
+            2. Focus on answers that synthesize information across chunks
+            3. For factual questions, verify against multiple chunks when possible
+            4. If unsure, say "I couldn't find definitive information about this in the documents"
             """
 
             PROMPT = PromptTemplate(
@@ -341,7 +328,6 @@ class ContextualRAGApplication:
                 input_variables=["context", "question", "chat_history"]
             )
 
-            # Create the QA chain
             self.qa_chain = (
                 {"context": self.retriever,
                  "question": RunnablePassthrough(),
@@ -351,7 +337,7 @@ class ContextualRAGApplication:
                 | StrOutputParser()
             )
 
-            logger.info("RAG pipeline initialized successfully")
+            logger.info("RAG pipeline with full-context awareness initialized")
         except Exception as e:
             logger.error(f"Failed to initialize RAG pipeline: {str(e)}")
             raise
@@ -367,39 +353,6 @@ class ContextualRAGApplication:
                 formatted_messages.append(f"{role}: {message.content}")
 
         return "\n".join(formatted_messages)
-
-    def add_documents_from_directory(self, directory_path: str, glob_pattern: str = "**/*.docx") -> str:
-        """Add documents from a directory to the vector store"""
-        try:
-            from langchain_community.document_loaders import DirectoryLoader
-
-            # Create directory loader
-            loader = DirectoryLoader(
-                directory_path,
-                glob=glob_pattern,
-                loader_cls=DocxLoader,
-                use_multithreading=True
-            )
-
-            # Load documents
-            documents = loader.load()
-
-            if not documents:
-                return "No documents found in the specified directory"
-
-            # Process and split documents
-            processed_docs = self._process_documents(documents)
-
-            # Add to vector store
-            self.vectorstore.add_documents(processed_docs)
-            self.vectorstore.persist()
-
-            logger.info(
-                f"Added {len(processed_docs)} documents from {directory_path}")
-            return f"Successfully processed {len(processed_docs)} document chunks from {len(documents)} files"
-        except Exception as e:
-            logger.error(f"Error adding documents from directory: {str(e)}")
-            return f"Error processing documents: {str(e)}"
 
     def add_uploaded_files(self, files) -> str:
         """Process and add uploaded files to the vector store"""
@@ -462,31 +415,45 @@ class ContextualRAGApplication:
             return f"Error processing files: {str(e)}"
 
     def _process_documents(self, documents: List[Document]) -> List[Document]:
-        """Process and split documents with contextual enrichment"""
-        # Filter out empty documents
+        """Process documents while maintaining full document context"""
         valid_docs = [doc for doc in documents if doc.page_content.strip()]
-
         if not valid_docs:
             return []
 
-        # Split documents
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-            add_start_index=True,
-            separators=["\n\n", "\n", " ", ""]
-        )
+        # Split documents while preserving full document reference
+        processed_chunks = []
+        for doc in valid_docs:
+            # Get the full document content from the original doc
+            full_document = doc.metadata.get("full_document", doc.page_content)
 
-        # Split documents into chunks
-        chunks = text_splitter.split_documents(valid_docs)
+            # Split just the initial content (not the full document)
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                length_function=len,
+                add_start_index=True
+            )
 
-        # Apply contextual enrichment to each chunk
+            # Create temporary document for splitting
+            temp_doc = Document(
+                page_content=doc.page_content,
+                metadata=doc.metadata.copy()
+            )
+
+            chunks = text_splitter.split_documents([temp_doc])
+
+            # Add full document reference to each chunk
+            for chunk in chunks:
+                chunk.metadata["full_document"] = full_document
+                chunk.metadata["is_full_document"] = False  # Mark as chunk
+                processed_chunks.append(chunk)
+
+        # Now enrich the chunks with full context
         enriched_chunks = []
         logger.info(
-            f"Enriching {len(chunks)} document chunks with contextual information...")
+            f"Enriching {len(processed_chunks)} chunks with full document context")
 
-        for chunk in tqdm(chunks, desc="Enriching chunks"):
+        for chunk in tqdm(processed_chunks, desc="Enriching chunks"):
             enriched_chunk = self.contextual_enricher.enrich_chunk(chunk)
             enriched_chunks.append(enriched_chunk)
 
@@ -758,47 +725,6 @@ def display_document_stats():
     return response
 
 
-def search_metadata(search_type, search_query):
-    """Search documents by metadata fields"""
-    if not search_query.strip():
-        return "Please enter a search query"
-
-    # Map search type to metadata field
-    field_mapping = {
-        "Topic": "topics",
-        "Entity": "entities",
-        "Temporal Reference": "temporal_references",
-        "Key Concept": "key_concepts"
-    }
-
-    field = field_mapping.get(search_type)
-    if not field:
-        return f"Invalid search type: {search_type}"
-
-    # Perform search
-    results = rag_app.search_by_metadata(field, search_query)
-
-    if not results:
-        return f"No documents found matching '{search_query}' in {search_type.lower()}s"
-
-    # Format results
-    response = f"📝 **Search Results for '{search_query}' in {search_type}s:**\n\n"
-    response += f"Found {len(results)} matching document chunks\n\n"
-
-    for i, doc in enumerate(results[:5], 1):  # Show top 5 results
-        source = os.path.basename(doc.metadata.get("source", "Unknown"))
-        summary = doc.metadata.get(
-            "contextual_summary", "No summary available")
-
-        response += f"**Result {i}:** {source}\n"
-        response += f"*Summary:* {summary}\n\n"
-
-    if len(results) > 5:
-        response += f"*...and {len(results) - 5} more results*"
-
-    return response
-
-
 # Create Gradio Interface
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
@@ -871,35 +797,6 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
                 )
 
 if __name__ == "__main__":
-    # Display important setup information
-    print("\n" + "="*60)
-    print("DOCX Document Intelligence RAG Application")
-    print("="*60)
-    print("\nEnvironment Variable Check:")
-
-    # Check environment variables
-    env_vars = {
-        "AZURE_OPENAI_EMBEDDING_DEPLOYMENT": os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
-        "AZURE_OPENAI_CHAT_DEPLOYMENT": os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
-        "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2023-05-15"),
-        "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", "").replace("https://", "")
-    }
-
-    for var, value in env_vars.items():
-        status = "✓" if value else "✗"
-        if var == "AZURE_OPENAI_API_KEY":
-            value = "********" if os.getenv(var) else None
-        print(f" {status} {var}: {value or 'Not set'}")
-
-    print("\nIMPORTANT NOTES:")
-    print(" - Embedding deployment must use a text-embedding model (e.g., text-embedding-ada-002)")
-    print(" - Chat deployment can use a chat model (e.g., gpt-4, gpt-35-turbo)")
-    print(" - If you encounter errors, check the logs in 'rag_app.log'\n")
-    print("="*60 + "\n")
-
-    # Optional: Add documents from a directory on startup
-    # rag_app.add_documents_from_directory("./docs/")
-
     try:
         # Launch the Gradio interface
         demo.launch(
