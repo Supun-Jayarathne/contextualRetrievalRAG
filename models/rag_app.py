@@ -39,6 +39,7 @@ class ContextualRAGApplication:
         self.reasoning_steps = 3  # Number of reasoning steps to perform
         self.self_reflection = True  # Whether to enable self-reflection
         self.critique_enabled = True  # Whether to enable answer critique
+        self.processed_files = set()  # Track processed file hashes
 
         # Initialize text splitter
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -367,7 +368,23 @@ class ContextualRAGApplication:
                     question = input_dict["question"]
 
                     # Get documents and contextual analysis
-                    docs = self.contextual_enricher.hybrid_search(question)
+                    docs = self.contextual_enricher.hybrid_search(
+                        question, k=10)
+
+                    # Extract only relevant sentences from each document
+                    def extract_relevant_sentences(content: str, question: str) -> str:
+                        # Simple implementation - in practice you might use more sophisticated NLP
+                        sentences = [s.strip()
+                                     for s in content.split('.') if s.strip()]
+                        relevant = []
+                        question_lower = question.lower()
+                        for sentence in sentences:
+                            if any(word.lower() in sentence.lower() for word in question.split()):
+                                relevant.append(f'"{sentence.strip()}."')
+                                if len(relevant) >= 3:  # Limit to 3 most relevant sentences
+                                    break
+                        return ' '.join(relevant) if relevant else '"Most relevant content not found in this document."'
+
                     contextual_analysis = "\n\n".join(
                         f"Document {i+1} (Relevance: {doc.metadata.get('contextual_score', 0):.0%}, Method: {doc.metadata.get('retrieval_method', 'unknown')}):\n"
                         f"Explanation: {doc.metadata.get('contextual_explanation', '')}\n"
@@ -375,8 +392,9 @@ class ContextualRAGApplication:
                         for i, doc in enumerate(docs)
                     )
 
+                    # Show only relevant sentences with quotes instead of full content
                     context_content = "\n\n".join(
-                        f"Document {i+1}:\n{doc.page_content}"
+                        f"Document {i+1} relevant content:\n{extract_relevant_sentences(doc.page_content, question)}"
                         for i, doc in enumerate(docs))
 
                     # Question analysis
@@ -392,7 +410,7 @@ class ContextualRAGApplication:
                     # Generate initial answer
                     initial_answer = self.llm.invoke(
                         PromptTemplate.from_template(
-                            "Answer this question based on the context:\nQuestion: {question}\nContext: {context}"
+                            "Answer this question based on the relevant context:\nQuestion: {question}\nRelevant Context: {context}"
                         ).format(
                             question=question,
                             context=context_content
@@ -507,15 +525,23 @@ class ContextualRAGApplication:
 
         return "\n".join(formatted_messages)
 
+    def _get_file_hash(self, file_content: bytes) -> str:
+        """Generate a consistent hash for file content"""
+        return hashlib.md5(file_content).hexdigest()
+
     def add_uploaded_files(self, files) -> str:
-        """Process and add uploaded files to the vector store"""
+        """Process and add uploaded files to the vector store with hash-based deduplication"""
         try:
             if not files:
                 return "No files provided"
 
             documents = []
-            processed_files = 0
-            failed_files = 0
+            stats = {
+                'processed_files': 0,
+                'skipped_files': 0,
+                'new_chunks': 0,
+                'failed_files': 0
+            }
 
             for file in files:
                 file_name = "unknown"
@@ -535,6 +561,17 @@ class ContextualRAGApplication:
                     # Validate file type
                     if not file_name.lower().endswith('.docx'):
                         logging.warning(f"Skipping non-DOCX file: {file_name}")
+                        stats['skipped_files'] += 1
+                        continue
+
+                    # Generate content-based hash
+                    file_hash = hashlib.md5(file_bytes).hexdigest()
+
+                    # Check if file already exists
+                    if self._is_file_processed(file_hash):
+                        logging.info(
+                            f"Skipping already processed file: {file_name}")
+                        stats['skipped_files'] += 1
                         continue
 
                     # Create temp directory if it doesn't exist
@@ -542,11 +579,10 @@ class ContextualRAGApplication:
                     os.makedirs(temp_dir, exist_ok=True)
 
                     # Create temp file path
-                    file_hash = hashlib.md5(file_name.encode()).hexdigest()[:8]
                     clean_name = re.sub(
                         r'[^\w.-]', '_', os.path.basename(file_name))
                     temp_path = os.path.join(
-                        temp_dir, f"upload_{file_hash}_{clean_name}")
+                        temp_dir, f"upload_{file_hash[:8]}_{clean_name}")
 
                     # Write to temp file
                     with open(temp_path, "wb") as f:
@@ -560,53 +596,80 @@ class ContextualRAGApplication:
                     except Exception as e:
                         logging.warning(
                             f"Invalid DOCX file {file_name}: {str(e)}")
-                        failed_files += 1
+                        os.remove(temp_path)
+                        stats['failed_files'] += 1
                         continue
 
                     # Load document
                     loader = DocxLoader(temp_path)
                     loaded_docs = loader.load()
+                    valid_docs = []
 
                     for doc in loaded_docs:
                         if doc.page_content.strip():
-                            # Apply metadata filtering immediately using our standard function
                             filtered_doc = safe_filter_metadata(doc)
                             if isinstance(filtered_doc, Document) and filtered_doc.page_content.strip():
-                                documents.append(filtered_doc)
+                                # Add file hash to metadata
+                                filtered_doc.metadata['file_hash'] = file_hash
+                                valid_docs.append(filtered_doc)
+
+                    if valid_docs:
+                        documents.extend(valid_docs)
+                        stats['processed_files'] += 1
+                        self._mark_file_processed(
+                            file_hash)  # Mark as processed
+
+                    # Clean up temp file
+                    os.remove(temp_path)
 
                 except Exception as e:
-                    logging.error(f"Error processing file: {str(e)}")
+                    logging.error(
+                        f"Error processing file {file_name}: {str(e)}")
+                    stats['failed_files'] += 1
                     continue
 
             if not documents:
-                return "No valid documents were extracted"
+                return (
+                    f"No valid documents extracted. "
+                    f"Skipped {stats['skipped_files']} duplicates, "
+                    f"{stats['failed_files']} failed"
+                )
 
             # Process documents through the standardized pipeline
             processed_chunks = self._process_documents(documents)
 
             if not processed_chunks:
-                return "No valid chunks created"
+                return "No valid chunks created after processing"
 
-            # Store with additional metadata validation
+            # Filter out chunks that already exist in the database
+            existing_hashes = self._get_existing_chunk_hashes()
+            new_chunks = [
+                chunk for chunk in processed_chunks
+                if chunk.metadata.get('file_hash') not in existing_hashes
+            ]
+
+            if not new_chunks:
+                return (
+                    f"All chunks already exist in database. "
+                    f"Processed {stats['processed_files']} files, "
+                    f"skipped {stats['skipped_files']} duplicates"
+                )
+
+            # Store only new chunks
             try:
-                # Double-check metadata before storing using our standard function
-                safe_chunks = []
-                for chunk in processed_chunks:
-                    filtered = safe_filter_metadata(chunk)
-                    if isinstance(filtered, Document) and filtered.page_content.strip():
-                        safe_chunks.append(filtered)
+                self.vectorstore.add_documents(new_chunks)
+                self.vectorstore.persist()
 
-                if safe_chunks:
-                    self.vectorstore.add_documents(safe_chunks)
-                    self.vectorstore.persist()
+                # Reinitialize retrievers if needed
+                if self.bm25_retriever:
+                    self.bm25_retriever._initialize_bm25()
 
-                    # Reinitialize retrievers
-                    if self.bm25_retriever:
-                        self.bm25_retriever._initialize_bm25()
-
-                    return f"Successfully stored {len(safe_chunks)} document chunks"
-                else:
-                    return "No valid chunks after final filtering"
+                stats['new_chunks'] = len(new_chunks)
+                return (
+                    f"Added {stats['new_chunks']} new chunks from {stats['processed_files']} files. "
+                    f"Skipped {stats['skipped_files']} duplicates. "
+                    f"{stats['failed_files']} files failed processing."
+                )
 
             except Exception as e:
                 logging.error(f"Error storing documents: {str(e)}")
@@ -616,21 +679,52 @@ class ContextualRAGApplication:
             logging.error(f"Error in add_uploaded_files: {str(e)}")
             return f"Error processing files: {str(e)}"
 
+    def _is_file_processed(self, file_hash: str) -> bool:
+        """Check if file has already been processed"""
+        # Implement your persistence method here (could be in-memory set, DB, etc.)
+        return file_hash in self.processed_files
+
+    def _mark_file_processed(self, file_hash: str):
+        """Mark a file as processed"""
+        self.processed_files.add(file_hash)
+        # Add persistence logic if needed
+
+    def _get_existing_chunk_hashes(self) -> set:
+        """Get hashes of all existing chunks in the vector store"""
+        try:
+            collection = self.vectorstore._collection
+            if collection.count() == 0:
+                return set()
+
+            return {
+                m.get('file_hash')
+                for m in collection.get()['metadatas']
+                if m.get('file_hash')
+            }
+        except Exception as e:
+            logging.error(f"Error getting existing hashes: {str(e)}")
+            return set()
+
     def _process_documents(self, documents: List[Document]) -> List[Document]:
         """Process documents with proper metadata filtering and contextual enrichment"""
         processed_chunks = []
         keyword_processor = KeywordProcessor()
+        processed_hashes = set()
+
+        def get_chunk_hash(chunk):
+            content_hash = hashlib.md5(chunk.page_content.encode()).hexdigest()
+            metadata_hash = hashlib.md5(json.dumps(
+                chunk.metadata, sort_keys=True).encode()).hexdigest()
+            return f"{content_hash}:{metadata_hash}"
 
         for doc in documents:
             if not isinstance(doc, Document) or not doc.page_content.strip():
                 continue
 
             try:
-                # First apply metadata filtering to the original document
                 filtered_doc = safe_filter_metadata(doc)
                 metadata = filtered_doc.metadata.copy()
 
-                # Ensure required metadata fields
                 metadata.update({
                     "source": metadata.get("source", "unknown"),
                     "filename": metadata.get("filename", "unknown"),
@@ -638,28 +732,21 @@ class ContextualRAGApplication:
                     "processing_time": time.time()
                 })
 
-                # Split document into chunks
                 chunks = self.text_splitter.split_documents([filtered_doc])
 
                 for chunk in chunks:
-                    if not isinstance(chunk, Document) or not chunk.page_content.strip():
+                    if not isinstance(chunk, Document) or not chunk.page_content.strip() or len(chunk.page_content.strip()) < 50:
                         continue
 
                     try:
-                        # Prepare chunk metadata with additional filtering
                         chunk_metadata = metadata.copy()
                         content = chunk.page_content
 
-                        # Extract keywords from this specific chunk (not the whole document)
                         keywords = keyword_processor.extract_keywords(content)
                         chunk_metadata["keywords"] = ", ".join(
-                            sorted(keywords))
-                        chunk_metadata["keywords"] = ", ".join(
-                            keywords) if isinstance(keywords, list) else ""
-
-                        # Add preprocessed text for this specific chunk
+                            sorted(keywords)) if keywords else ""
                         preprocessed = keyword_processor.preprocess_text(
-                            chunk.page_content)
+                            content)
                         chunk_metadata["preprocessed_text"] = preprocessed if isinstance(
                             preprocessed, str) else ""
 
@@ -670,36 +757,30 @@ class ContextualRAGApplication:
                             "word_count": len(content.split())
                         })
 
-                        # Apply final metadata filtering
                         filtered_metadata = safe_filter_metadata(
                             chunk_metadata)
-                        final_metadata = filtered_metadata if isinstance(filtered_metadata, dict) \
-                            else filtered_metadata.metadata
+                        final_metadata = filtered_metadata if isinstance(
+                            filtered_metadata, dict) else filtered_metadata.metadata
 
                         base_chunk = Document(
                             page_content=content,
                             metadata=final_metadata
                         )
 
-                        # Apply contextual enrichment if available
-                        if hasattr(self, 'contextual_enricher') and self.contextual_enricher:
-                            try:
-                                enriched_chunk = self.contextual_enricher.enrich_chunk(
-                                    base_chunk)
-                                if enriched_chunk and enriched_chunk.page_content.strip():
-                                    # Final metadata filtering before adding
-                                    final_chunk = safe_filter_metadata(
-                                        enriched_chunk)
-                                    if isinstance(final_chunk, Document) and final_chunk.page_content.strip():
-                                        processed_chunks.append(final_chunk)
-                                        continue
-                            except Exception as enrich_error:
-                                logging.error(
-                                    f"Contextual enrichment failed: {str(enrich_error)}")
+                        # Try to enrich, otherwise use base chunk
+                        try:
+                            final_chunk = self.contextual_enricher.enrich_chunk(
+                                base_chunk) if hasattr(self, 'contextual_enricher') else base_chunk
+                            if not isinstance(final_chunk, Document) or not final_chunk.page_content.strip():
+                                final_chunk = base_chunk
+                        except Exception:
+                            final_chunk = base_chunk
 
-                        # Fallback: add base chunk if it's a Document with content
-                        if isinstance(base_chunk, Document) and base_chunk.page_content.strip():
-                            processed_chunks.append(base_chunk)
+                        # Deduplication check
+                        chunk_hash = get_chunk_hash(final_chunk)
+                        if chunk_hash not in processed_hashes:
+                            processed_chunks.append(final_chunk)
+                            processed_hashes.add(chunk_hash)
 
                     except Exception as chunk_error:
                         logging.error(

@@ -3,3 +3,5 @@ docs
 .env
 chroma_db_docx
 **/*.log
+__pycache__/
+temp_uploads

@@ -21,7 +21,7 @@ def query_rag(question, history, show_sources, include_time, show_context):
         if show_sources and "source_documents" in result:
             sources = "\n\n📄 **Document Sources (with Contextual Relevance):**\n"
 
-            for i, doc in enumerate(result["source_documents"], 1):
+            for i, doc in enumerate(result["source_documents"][:10], 1):
                 source_name = os.path.basename(
                     doc.metadata.get('source', 'Unknown'))
                 score = doc.metadata.get("contextual_score", 0)

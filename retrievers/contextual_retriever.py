@@ -57,7 +57,7 @@ class ContextualRetriever:
 
         return analysis
 
-    def hybrid_search(self, question: str, k: int = 5) -> List[Document]:
+    def hybrid_search(self, question: str, k: int = 10) -> List[Document]:
         """Improved hybrid search with consistent scoring and deduplication"""
         try:
             # 1. Retrieve documents from both methods
@@ -234,7 +234,7 @@ class ContextualRetriever:
 
         return processed_docs
 
-    def contextual_search(self, question: str, k: int = 5) -> List[Document]:
+    def contextual_search(self, question: str, k: int = 10) -> List[Document]:
         """Use hybrid search by default"""
         return self.hybrid_search(question, k)
 

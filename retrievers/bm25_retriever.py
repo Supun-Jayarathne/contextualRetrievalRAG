@@ -71,7 +71,7 @@ class BM25Retriever:
         query_preprocessed = self.keyword_processor.preprocess_text(query)
         return f"{' '.join(query_keywords)} {query_preprocessed}"
 
-    def retrieve(self, query: str, k: int = 5) -> List[Document]:
+    def retrieve(self, query: str, k: int = 10) -> List[Document]:
         """Retrieve documents with proper empty collection handling"""
         try:
             if not self.bm25 or not self.documents:
